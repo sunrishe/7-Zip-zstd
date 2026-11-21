@@ -32,6 +32,7 @@ HRESULT ExtractGUI(
     CHashBundle *hb,
     #endif
     bool showDialog,
+    bool smartExtract,
     bool &messageWasDisplayed,
     CExtractCallbackImp *extractCallback,
     HWND hwndParent = NULL);

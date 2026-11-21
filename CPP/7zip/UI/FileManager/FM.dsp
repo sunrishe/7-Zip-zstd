@@ -691,6 +691,14 @@ SOURCE=..\..\Common\PropId.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Common\StreamBinder.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\StreamBinder.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Common\StreamObjects.cpp
 # End Source File
 # Begin Source File
@@ -1284,6 +1292,14 @@ SOURCE=..\Common\EnumDirItems.cpp
 # Begin Source File
 
 SOURCE=..\Common\EnumDirItems.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\Common\NestedTar.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\Common\NestedTar.h
 # End Source File
 # Begin Source File
 

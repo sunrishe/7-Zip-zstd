@@ -241,7 +241,23 @@ SOURCE=..\Common\Extract.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=..\Common\SmartExtract.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\Common\Extract.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\Common\SmartExtract.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\Common\NestedTar.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\Common\NestedTar.h
 # End Source File
 # Begin Source File
 
@@ -690,6 +706,14 @@ SOURCE=..\..\Common\ProgressUtils.h
 # Begin Source File
 
 SOURCE=..\..\Common\PropId.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\StreamBinder.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Common\StreamBinder.h
 # End Source File
 # Begin Source File
 

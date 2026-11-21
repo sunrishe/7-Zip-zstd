@@ -14,6 +14,7 @@
 #include "../Common/HashCalc.h"
 
 #include "Extract.h"
+#include "SmartExtract.h"
 #include "SetProperties.h"
 
 using namespace NWindows;
@@ -32,13 +33,13 @@ static void SetErrorMessage(const char *message,
   s += fs2us(path);
 }
 
-
 static HRESULT DecompressArchive(
     CCodecs *codecs,
     const CArchiveLink &arcLink,
     UInt64 packSize,
     const NWildcard::CCensorNode &wildcardCensor,
     const CExtractOptions &options,
+    const CSmartExtractOptions *smartOptions,
     bool calcCrc,
     IExtractCallbackUI *callback,
     IFolderArchiveExtractCallback *callbackFAE,
@@ -80,7 +81,10 @@ static HRESULT DecompressArchive(
   UString elimPrefix; // only pure name without dir delimiter
   FString outDirReduced = outDir;
   
-  if (options.ElimDup.Val && options.PathMode != NExtract::NPathMode::kAbsPaths)
+  if (smartOptions && !smartOptions->RemovePathParts.IsEmpty()
+      && options.PathMode != NExtract::NPathMode::kAbsPaths)
+    elimIsPossible = true;
+  else if (options.ElimDup.Val && options.PathMode != NExtract::NPathMode::kAbsPaths)
   {
     UString dirPrefix;
     SplitPathToParts_Smart(fs2us(outDir), dirPrefix, elimPrefix);
@@ -132,7 +136,34 @@ static HRESULT DecompressArchive(
         continue;
       #endif
       
-      if (elimIsPossible)
+      bool skipItem = false;
+
+      if (smartOptions && !smartOptions->RemovePathParts.IsEmpty())
+      {
+        const UInt32 numRemoveParts = smartOptions->RemovePathParts.Size();
+        bool prefixMatches = item.PathParts.Size() >= numRemoveParts;
+        if (prefixMatches)
+        {
+          FOR_VECTOR (k, smartOptions->RemovePathParts)
+          {
+            if (CompareFileNames(item.PathParts[k],
+                smartOptions->RemovePathParts[k]) != 0)
+            {
+              prefixMatches = false;
+              break;
+            }
+          }
+        }
+
+        if (item.MainIsDir && item.PathParts.Size() <= numRemoveParts)
+        {
+          if (prefixMatches)
+            skipItem = true;
+        }
+        else if (!prefixMatches)
+          elimIsPossible = false;
+      }
+      else if (elimIsPossible)
       {
         const UString &s =
           #ifdef SUPPORT_ALT_STREAMS
@@ -171,6 +202,9 @@ static HRESULT DecompressArchive(
       }
 #endif
 
+      if (skipItem)
+        continue;
+
       realIndices.Add(i);
     }
     
@@ -183,7 +217,10 @@ static HRESULT DecompressArchive(
 
   if (elimIsPossible)
   {
-    removePathParts.Add(elimPrefix);
+    if (smartOptions && !smartOptions->RemovePathParts.IsEmpty())
+      removePathParts = smartOptions->RemovePathParts;
+    else
+      removePathParts.Add(elimPrefix);
     // outDir = outDirReduced;
   }
 
@@ -293,6 +330,7 @@ HRESULT Extract(
     UStringVector &arcPaths, UStringVector &arcPathsFull,
     const NWildcard::CCensorNode &wildcardCensor,
     const CExtractOptions &options,
+    const CSmartExtractOptions *smartOptions,
     IOpenCallbackUI *openCallback,
     IExtractCallbackUI *extractCallback,
     IFolderArchiveExtractCallback *faeCallback,
@@ -540,8 +578,26 @@ HRESULT Extract(
     #endif
     */
 
-    CArc &arc = arcLink.Arcs.Back();
-    arc.MTime.Def = !options.StdInMode
+    CArchiveLink nestedArcLink;
+    CArchiveLink *extractArcLink = &arcLink;
+    CExtractOptions extractOptions = options;
+    CSmartExtractOptions smartOptionsCur;
+    const CSmartExtractOptions *smartOptionsForArc = NULL;
+    if (smartOptions && smartOptions->Enabled)
+    {
+      smartOptionsCur = *smartOptions;
+      smartOptionsForArc = &smartOptionsCur;
+    }
+
+    if (smartOptionsForArc)
+    {
+      RINOK(PrepareSmartExtract(
+          codecs, op, arcPath, arcLink, nestedArcLink,
+          extractArcLink, extractOptions, smartOptionsCur))
+    }
+
+    CArc &arc = extractArcLink->Arcs.Back();
+    arc.MTime.Def = !extractOptions.StdInMode
         #ifdef _WIN32
         && !fi.IsDevice
         #endif
@@ -559,10 +615,11 @@ HRESULT Extract(
 
     RINOK(DecompressArchive(
         codecs,
-        arcLink,
+        *extractArcLink,
         fi.Size + arcLink.VolumesSize,
         wildcardCensor,
-        options,
+        extractOptions,
+        smartOptionsForArc,
         calcCrc,
         extractCallback, faeCallback, ecs,
         errorMessage, packProcessed))

@@ -25,6 +25,8 @@ UI_COMMON_OBJS = \
   $O\DefaultName.obj \
   $O\EnumDirItems.obj \
   $O\Extract.obj \
+  $O\NestedTar.obj \
+  $O\SmartExtract.obj \
   $O\ExtractingFilePath.obj \
   $O\HashCalc.obj \
   $O\LoadCodecs.obj \

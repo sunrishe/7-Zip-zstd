@@ -64,6 +64,7 @@ struct CArcCmdLineOptions
 
 
   bool YesToAll;
+  bool SmartExtract;
   bool ShowDialog;
   bool TechMode;
   bool ShowTime;
@@ -137,6 +138,7 @@ struct CArcCmdLineOptions
       DisablePercents(false),
       
       YesToAll(false),
+      SmartExtract(false),
       ShowDialog(false),
       TechMode(false),
       ShowTime(false),

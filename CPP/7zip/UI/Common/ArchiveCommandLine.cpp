@@ -139,6 +139,7 @@ enum Enum
   kPercentStream,
 
   kYes,
+  kSmartExtract,
 
   kShowDialog,
   kOverwrite,
@@ -291,6 +292,7 @@ static const CSwitchForm kSwitchForms[] =
   { "bsp", NSwitchType::kChar, false, 1, k_Stream_PostCharSet },
   
   { "y", SWFRM_SIMPLE },
+  { "azsmart", SWFRM_SIMPLE },
   
   { "ad", SWFRM_SIMPLE },
   { "ao", NSwitchType::kChar, false, 1, kOverwritePostCharSet},
@@ -1058,6 +1060,7 @@ void CArcCmdLineParser::Parse1(const UStringVector &commandStrings,
 
   options.HelpMode = parser[NKey::kHelp1].ThereIs || parser[NKey::kHelp2].ThereIs  || parser[NKey::kHelp3].ThereIs;
   options.YesToAll = parser[NKey::kYes].ThereIs;
+  options.SmartExtract = parser[NKey::kSmartExtract].ThereIs;
 
   options.StdInMode = parser[NKey::kStdIn].ThereIs;
   options.StdOutMode = parser[NKey::kStdOut].ThereIs;

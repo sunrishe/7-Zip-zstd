@@ -324,7 +324,7 @@ static int Main2()
           #ifndef Z7_SFX
           hb_ptr,
           #endif
-          options.ShowDialog, messageWasDisplayed, ecs);
+          options.ShowDialog, options.SmartExtract, messageWasDisplayed, ecs);
     if (result != S_OK)
     {
       if (result != E_ABORT && messageWasDisplayed)

@@ -76,6 +76,7 @@ WIN_CTRL_OBJS = \
   $O\MultiOutStream.obj \
   $O\ProgressUtils.obj \
   $O\PropId.obj \
+  $O\StreamBinder.obj \
   $O\StreamObjects.obj \
   $O\StreamUtils.obj \
   $O\UniqBlocks.obj \
@@ -88,6 +89,8 @@ UI_COMMON_OBJS = \
   $O\DefaultName.obj \
   $O\EnumDirItems.obj \
   $O\Extract.obj \
+  $O\NestedTar.obj \
+  $O\SmartExtract.obj \
   $O\ExtractingFilePath.obj \
   $O\HashCalc2.obj \
   $O\LoadCodecs.obj \

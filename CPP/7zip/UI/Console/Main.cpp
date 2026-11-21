@@ -60,6 +60,7 @@ typedef PROCESS_MEMORY_COUNTERS *PPROCESS_MEMORY_COUNTERS;
 #include "../Common/Bench.h"
 #include "../Common/ExitCode.h"
 #include "../Common/Extract.h"
+#include "../Common/SmartExtract.h"
 
 #ifdef Z7_EXTERNAL_CODECS
 #include "../Common/LoadCodecs.h"
@@ -1401,6 +1402,14 @@ int Main2(
       CHashBundle hb;
       IHashCalc *hashCalc = NULL;
 
+      CSmartExtractOptions smartOptions;
+      const CSmartExtractOptions *smartOptionsPtr = NULL;
+      if (options.SmartExtract)
+      {
+        smartOptions.Enabled = true;
+        smartOptionsPtr = &smartOptions;
+      }
+
       if (!options.HashMethods.IsEmpty())
       {
         hashCalc = &hb;
@@ -1417,6 +1426,7 @@ int Main2(
           ArchivePathsFullSorted,
           options.Censor.Pairs.Front().Head,
           eo,
+          smartOptionsPtr,
           ecs, ecs, ecs,
           hashCalc, errorMessage, stat);
       

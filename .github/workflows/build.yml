@@ -230,6 +230,11 @@ jobs:
 
           REM Will be by the do-release action
           copy %WDIR%\.github\workflows\do-release.cmd %WDIR%\build\do-release.cmd
+          IF %errorlevel% NEQ 0 EXIT 1
+          copy %WDIR%\.github\workflows\patch-smart-extract-lang.ps1 %WDIR%\build\patch-smart-extract-lang.ps1
+          IF %errorlevel% NEQ 0 EXIT 1
+          xcopy "%WDIR%\.github\workflows\smart-extract-lang" "%WDIR%\build\smart-extract-lang\" /E /I /Y
+          IF %errorlevel% NEQ 0 EXIT 1
 
       - name: Test
         shell: cmd
@@ -239,6 +244,9 @@ jobs:
           if "${{matrix.darkmode}}" == "" set OUTDIR=%OUTDIR%-ndm
           set Z7_PATH=%OUTDIR%\7z.exe
           tclsh tests\7z-test.tcl -verbose tsem
+          IF %errorlevel% NEQ 0 EXIT 1
+          pwsh -NoProfile -File tests\test-smart-extract-lang.ps1
+          IF %errorlevel% NEQ 0 EXIT 1
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v6

@@ -61,6 +61,7 @@ WIN_CTRL_OBJS = \
   $O\MethodProps.obj \
   $O\ProgressUtils.obj \
   $O\PropId.obj \
+  $O\StreamBinder.obj \
   $O\StreamObjects.obj \
   $O\StreamUtils.obj \
   $O\UniqBlocks.obj \
@@ -75,6 +76,7 @@ UI_COMMON_OBJS = \
   $O\ExtractingFilePath.obj \
   $O\HashCalc2.obj \
   $O\LoadCodecs.obj \
+  $O\NestedTar.obj \
   $O\OpenArchive.obj \
   $O\PropIDUtils.obj \
   $O\SetProperties.obj \

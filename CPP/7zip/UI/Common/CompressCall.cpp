@@ -12,13 +12,17 @@
 #include "../../../Windows/DLL.h"
 #include "../../../Windows/ErrorMsg.h"
 #include "../../../Windows/FileDir.h"
+#include "../../../Windows/FileName.h"
 #include "../../../Windows/FileMapping.h"
 #include "../../../Windows/MemoryLock.h"
 #include "../../../Windows/ProcessUtils.h"
+#include "../../../Windows/Shell.h"
 #include "../../../Windows/Synchronization.h"
 
 #include "../FileManager/StringUtils.h"
+#include "../FileManager/LangUtils.h"
 #include "../FileManager/RegistryUtils.h"
+#include "../Explorer/SmartExtractRes.h"
 
 #include "ZipRegistry.h"
 #include "CompressCall.h"
@@ -378,6 +382,44 @@ void ExtractArchives(const UStringVector &arcPaths, const UString &outFolder, bo
   }
   if (showDialog)
     params += kShowDialogSwitch;
+  ExtractGroupCommand(arcPaths, params, false);
+  MY_TRY_FINISH_VOID
+}
+
+void SmartExtractArchives(const UStringVector &arcPaths, const UString &outFolder,
+    bool toDesktop, UInt32 writeZone)
+{
+  MY_TRY_BEGIN
+  UString baseFolder = outFolder;
+  if (toDesktop)
+  {
+    wchar_t desktopPath[MAX_PATH];
+    const HRESULT res = ::SHGetFolderPathW(NULL,
+        CSIDL_DESKTOPDIRECTORY | CSIDL_FLAG_CREATE, NULL,
+        SHGFP_TYPE_CURRENT, desktopPath);
+    if (res != S_OK)
+    {
+      UString message;
+      LangString(IDS_SMART_EXTRACT_DESKTOP_PATH, message);
+      ErrorMessageHRESULT(res, message);
+      return;
+    }
+    baseFolder = desktopPath;
+    NFile::NName::NormalizeDirPathPrefix(baseFolder);
+  }
+
+  UString params ('x');
+  params += " -azsmart";
+  if (!baseFolder.IsEmpty())
+  {
+    params += " -o";
+    params += GetQuotedString(baseFolder);
+  }
+  if (writeZone != (UInt32)(Int32)-1)
+  {
+    params += " -snz";
+    params.Add_UInt32(writeZone);
+  }
   ExtractGroupCommand(arcPaths, params, false);
   MY_TRY_FINISH_VOID
 }

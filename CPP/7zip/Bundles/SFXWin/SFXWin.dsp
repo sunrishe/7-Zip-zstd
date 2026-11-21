@@ -800,7 +800,23 @@ SOURCE=..\..\UI\Common\Extract.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\UI\Common\SmartExtract.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\UI\Common\Extract.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\Common\SmartExtract.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\Common\NestedTar.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\UI\Common\NestedTar.h
 # End Source File
 # Begin Source File
 

@@ -17,9 +17,11 @@
 #include "../../../Windows/Synchronization.h"
 #endif
 
+#include "../../Common/FileStreams.h"
 #include "../../Archive/Common/ItemNameUtils.h"
 
 #include "../Common/ArchiveExtractCallback.h"
+#include "../Common/NestedTar.h"
 #include "../FileManager/RegistryUtils.h"
 
 #include "Agent.h"
@@ -1633,13 +1635,15 @@ Z7_COM7F_IMF(CAgent::Open(
     IArchiveOpenCallback *openArchiveCallback))
 {
   COM_TRY_BEGIN
+  CMyComPtr<IInStream> fileStream;
+  const bool useFileStream = !inStream;
   _archiveFilePath = filePath;
   _hashBaseFolderPrefix.Empty();
   _attrib = 0;
   _isDeviceFile = false;
   _isHashHandler = false;
   NFile::NFind::CFileInfo fi;
-  if (!inStream)
+  if (useFileStream)
   {
     if (!fi.Find(us2fs(_archiveFilePath)))
       return GetLastError_noZero_HRESULT();
@@ -1653,6 +1657,12 @@ Z7_COM7F_IMF(CAgent::Open(
       NFile::NName::NormalizeDirPathPrefix(dirPrefix);
       _hashBaseFolderPrefix = dirPrefix;
     }
+
+    CInFileStream *fileStreamSpec = new CInFileStream;
+    fileStream = fileStreamSpec;
+    if (!fileStreamSpec->Open(us2fs(_archiveFilePath)))
+      return GetLastError_noZero_HRESULT();
+    inStream = fileStream;
   }
   CArcInfoEx archiverInfo0, archiverInfo1;
 
@@ -1688,8 +1698,17 @@ Z7_COM7F_IMF(CAgent::Open(
 
   if (!_archiveLink.Arcs.IsEmpty())
   {
+    if (res == S_OK)
+    {
+      bool nestedTarFound;
+      bool nestedTarSequential;
+      RINOK(NestedTar_OpenSingle(g_CodecsObj, options,
+          _archiveLink.Arcs.Back(), _archiveLink,
+          nestedTarFound, nestedTarSequential, inStream))
+    }
+
     CArc &arc = _archiveLink.Arcs.Back();
-    if (!inStream)
+    if (useFileStream)
     {
       arc.MTime.Set_From_FiTime(fi.MTime);
       arc.MTime.Def = !fi.IsDevice;

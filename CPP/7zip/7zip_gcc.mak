@@ -929,6 +929,10 @@ $O/EnumDirItems.o: ../../UI/Common/EnumDirItems.cpp
 	$(CXX) $(CXXFLAGS) $<
 $O/Extract.o: ../../UI/Common/Extract.cpp
 	$(CXX) $(CXXFLAGS) $<
+$O/NestedTar.o: ../../UI/Common/NestedTar.cpp
+	$(CXX) $(CXXFLAGS) $<
+$O/SmartExtract.o: ../../UI/Common/SmartExtract.cpp
+	$(CXX) $(CXXFLAGS) $<
 $O/ExtractingFilePath.o: ../../UI/Common/ExtractingFilePath.cpp
 	$(CXX) $(CXXFLAGS) $<
 $O/HashCalc.o: ../../UI/Common/HashCalc.cpp

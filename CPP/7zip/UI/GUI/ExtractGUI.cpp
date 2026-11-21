@@ -18,8 +18,10 @@
 
 #include "../Common/ArchiveExtractCallback.h"
 #include "../Common/PropIDUtils.h"
+#include "../Common/SmartExtract.h"
 
 #include "../Explorer/MyMessages.h"
+#include "../Explorer/SmartExtractRes.h"
 
 #include "resource2.h"
 #include "ExtractRes.h"
@@ -77,6 +79,7 @@ public:
   UStringVector *ArchivePathsFull;
   const NWildcard::CCensorNode *WildcardCensor;
   const CExtractOptions *Options;
+  const CSmartExtractOptions *SmartOptions;
 
   #ifndef Z7_SFX
   CHashBundle *HashBundle;
@@ -123,6 +126,7 @@ HRESULT CThreadExtracting::ProcessVirt()
       *FormatIndices, *ExcludedFormatIndices,
       *ArchivePaths, *ArchivePathsFull,
       *WildcardCensor, *Options,
+      SmartOptions,
       ExtractCallbackSpec, ExtractCallbackSpec, FolderArchiveExtractCallback,
       #ifndef Z7_SFX
         HashBundle,
@@ -190,6 +194,35 @@ static void BrowseToPath(
 }
 #endif
 
+class CSmartExtractCallback Z7_final: public ISmartExtractCallback
+{
+public:
+  HWND Owner;
+
+  CSmartExtractCallback(): Owner(NULL) {}
+
+  EConflict AskFolderConflict(const FString &path) Z7_override
+  {
+    UString format;
+    LangString(IDS_SMART_EXTRACT_FOLDER_EXISTS, format);
+    UString message = MyFormatNew(format, fs2us(path));
+    const int res = ::MessageBoxW(Owner, message, L"7-Zip ZS",
+        MB_YESNOCANCEL | MB_ICONQUESTION | MB_DEFBUTTON1);
+    if (res == IDYES)
+      return kConflict_Rename;
+    if (res == IDNO)
+      return kConflict_Overwrite;
+    return kConflict_Cancel;
+  }
+
+  void ThereAreNoFiles() Z7_override
+  {
+    UString message;
+    LangString(IDS_SMART_EXTRACT_NO_FILES, message);
+    ::MessageBoxW(Owner, message, L"7-Zip ZS", MB_OK | MB_ICONWARNING);
+  }
+};
+
 HRESULT ExtractGUI(
     // DECL_EXTERNAL_CODECS_LOC_VARS
     CCodecs *codecs,
@@ -203,6 +236,7 @@ HRESULT ExtractGUI(
     CHashBundle *hb,
     #endif
     bool showDialog,
+    bool smartExtract,
     bool &messageWasDisplayed,
     CExtractCallbackImp *extractCallback,
     HWND hwndParent)
@@ -222,6 +256,12 @@ HRESULT ExtractGUI(
 #ifndef Z7_SFX
   bool OpnTrgFold = false;
 #endif
+  CSmartExtractCallback smartExtractCallback;
+  smartExtractCallback.Owner = hwndParent;
+  CSmartExtractOptions smartOptions;
+  smartOptions.Enabled = smartExtract;
+  smartOptions.Callback = &smartExtractCallback;
+
   if (!options.TestMode)
   {
     FString outputDir = options.OutputDir;
@@ -324,6 +364,7 @@ HRESULT ExtractGUI(
   extracter.ArchivePathsFull = &archivePathsFull;
   extracter.WildcardCensor = &wildcardCensor;
   extracter.Options = &options;
+  extracter.SmartOptions = smartOptions.Enabled ? &smartOptions : NULL;
   #ifndef Z7_SFX
   extracter.HashBundle = hb;
   #endif

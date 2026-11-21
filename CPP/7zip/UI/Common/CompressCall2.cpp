@@ -198,7 +198,8 @@ static HRESULT ExtractGroupCommand(const UStringVector &arcPaths,
   result = ExtractGUI(codecs,
       formatIndices, CIntVector(),
       arcPathsSorted, arcFullPathsSorted,
-      censor.Pairs.Front().Head, eo, NULL, showDialog, messageWasDisplayed, ecs, g_HWND);
+      censor.Pairs.Front().Head, eo, NULL, showDialog, false,
+      messageWasDisplayed, ecs, g_HWND);
 
   if (result != S_OK)
   {

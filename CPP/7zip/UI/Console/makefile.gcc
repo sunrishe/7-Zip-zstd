@@ -89,6 +89,8 @@ UI_COMMON_OBJS = \
   $O/DefaultName.o \
   $O/EnumDirItems.o \
   $O/Extract.o \
+  $O/NestedTar.o \
+  $O/SmartExtract.o \
   $O/ExtractingFilePath.o \
   $O/HashCalc.o \
   $O/LoadCodecs.o \
@@ -150,6 +152,7 @@ WIN_OBJS = \
   $O/OutBuffer.o \
   $O/ProgressUtils.o \
   $O/PropId.o \
+  $O/StreamBinder.o \
   $O/StreamObjects.o \
   $O/StreamUtils.o \
   $O/UniqBlocks.o \

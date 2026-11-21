@@ -14,6 +14,8 @@
 
 #include "../Common/LoadCodecs.h"
 
+struct CSmartExtractOptions;
+
 namespace NExtractOutDirMode {
 enum EEnum
 {
@@ -60,7 +62,6 @@ struct CExtractOptions: public CExtractOptionsBase
   bool StdOutMode;
   bool YesToAll;
   bool TestMode;
-  
   // bool ShowDialog;
   // bool PasswordEnabled;
   // UString Password;
@@ -108,6 +109,7 @@ HRESULT Extract(
     UStringVector &archivePaths, UStringVector &archivePathsFull,
     const NWildcard::CCensorNode &wildcardCensor,
     const CExtractOptions &options,
+    const CSmartExtractOptions *smartOptions,
     IOpenCallbackUI *openCallback,
     IExtractCallbackUI *extractCallback,
     IFolderArchiveExtractCallback *faeCallback,

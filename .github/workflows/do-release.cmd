@@ -21,6 +21,8 @@ IF %errorlevel% NEQ 0 EXIT 1
 %SZIP% x 7-Zip.exe
 IF %errorlevel% NEQ 0 EXIT 1
 del 7-Zip.exe
+pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0patch-smart-extract-lang.ps1" -LangDir "%SKEL%\Lang"
+IF %errorlevel% NEQ 0 EXIT 1
 goto start
 
 @rem Doit function

@@ -274,6 +274,8 @@ static const CContextMenuCommand g_Commands[] =
   CMD_REC( kExtract,     "Extract",     IDS_CONTEXT_EXTRACT),
   CMD_REC( kExtractHere, "ExtractHere", IDS_CONTEXT_EXTRACT_HERE),
   CMD_REC( kExtractTo,   "ExtractTo",   IDS_CONTEXT_EXTRACT_TO),
+  CMD_REC( kSmartExtract,          "SmartExtract",          IDS_CONTEXT_SMART_EXTRACT),
+  CMD_REC( kSmartExtractToDesktop, "SmartExtractToDesktop", IDS_CONTEXT_SMART_EXTRACT_DESKTOP),
   CMD_REC( kTest,        "Test",        IDS_CONTEXT_TEST),
   CMD_REC( kCompress,           "Compress",           IDS_CONTEXT_COMPRESS),
   CMD_REC( kCompressEmail,      "CompressEmail",      IDS_CONTEXT_COMPRESS_EMAIL),
@@ -430,6 +432,42 @@ static void MyAddSubMenu(
   mi.StringValue = s;
   if (!menu.InsertItem(pos, true, mi))
     throw 20190817;
+}
+
+static unsigned CountContextMenuItems(UInt32 flags)
+{
+  unsigned num = 0;
+  if (flags & NContextMenuFlags::kSmartExtract)
+    num++;
+  if (flags & NContextMenuFlags::kSmartExtractToDesktop)
+    num++;
+  if (flags & NContextMenuFlags::kExtract)
+    num++;
+  if (flags & NContextMenuFlags::kExtractHere)
+    num++;
+  if (flags & NContextMenuFlags::kExtractTo)
+    num++;
+  if (flags & NContextMenuFlags::kTest)
+    num++;
+  if (flags & NContextMenuFlags::kCompress)
+    num++;
+  #ifdef EMAIL_SUPPORT
+  if (flags & NContextMenuFlags::kCompressEmail)
+    num++;
+  #endif
+  if (flags & NContextMenuFlags::kCompressTo7z)
+    num++;
+  #ifdef EMAIL_SUPPORT
+  if (flags & NContextMenuFlags::kCompressTo7zEmail)
+    num++;
+  #endif
+  if (flags & NContextMenuFlags::kCompressToZip)
+    num++;
+  #ifdef EMAIL_SUPPORT
+  if (flags & NContextMenuFlags::kCompressToZipEmail)
+    num++;
+  #endif
+  return num;
 }
 
 
@@ -803,7 +841,8 @@ Z7_COMWF_B CZipContextMenu::QueryContextMenu(HMENU hMenu, UINT indexMenu,
 
   ODS("### 150")
 
-  if (_fileNames.Size() > 0 && currentCommandID + 10 <= commandIDLast)
+  if (_fileNames.Size() > 0
+      && currentCommandID + CountContextMenuItems(contextMenuFlags) <= commandIDLast)
   {
     ODS("### needExtract list START")
     const bool needExtendedVerbs = ((flags & Z7_WIN_CMF_EXTENDEDVERBS) != 0);
@@ -847,6 +886,22 @@ Z7_COMWF_B CZipContextMenu::QueryContextMenu(HMENU hMenu, UINT indexMenu,
         if (_fileNames.Size() == 1)
           specFolder = GetSubFolderNameForExtract(fs2us(fi0.Name));
         specFolder.Add_PathSepar();
+
+        if ((contextMenuFlags & NContextMenuFlags::kSmartExtract) != 0)
+        {
+          CCommandMapItem cmi;
+          cmi.Folder = baseFolder;
+          AddCommand(kSmartExtract, mainString, cmi);
+          MyInsertMenu(popupMenu, subIndex++, currentCommandID++, mainString, bitmap);
+        }
+
+        if ((contextMenuFlags & NContextMenuFlags::kSmartExtractToDesktop) != 0)
+        {
+          CCommandMapItem cmi;
+          cmi.Folder = baseFolder;
+          AddCommand(kSmartExtractToDesktop, mainString, cmi);
+          MyInsertMenu(popupMenu, subIndex++, currentCommandID++, mainString, bitmap);
+        }
 
         if ((contextMenuFlags & NContextMenuFlags::kExtract) != 0)
         {
@@ -1299,6 +1354,19 @@ HRESULT CZipContextMenu::InvokeCommandCommon(const CCommandMapItem &cmi)
             (cmdID == kExtractTo) && _elimDup.Val, // elimDup
             _writeZone
             );
+        break;
+      }
+      case kSmartExtract:
+      case kSmartExtractToDesktop:
+      {
+        if (_attribs.FirstDirIndex != -1)
+        {
+          ShowErrorMessageRes(IDS_SELECT_FILES);
+          break;
+        }
+        SmartExtractArchives(_fileNames, cmi.Folder,
+            cmdID == kSmartExtractToDesktop,
+            _writeZone);
         break;
       }
       case kTest:

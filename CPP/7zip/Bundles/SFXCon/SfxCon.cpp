@@ -455,7 +455,7 @@ int Main2(
           codecs, CObjectVector<COpenType>(), CIntVector(),
           v1, v2,
           wildcardCensorHead,
-          eo,
+          eo, NULL,
           ecs, ecs, ecs,
           // NULL, // hash
           errorMessage, stat);

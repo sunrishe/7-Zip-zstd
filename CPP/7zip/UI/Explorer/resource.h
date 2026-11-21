@@ -13,3 +13,5 @@
 #define IDS_SELECT_FILES                3015
 
 #define IDB_MENU_LOGO  190
+
+#include "SmartExtractRes.h"

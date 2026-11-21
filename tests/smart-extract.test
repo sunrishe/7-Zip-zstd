@@ -1,0 +1,155 @@
+# smart-extract.test --
+#
+# Regression tests for smart extraction.
+
+if {[namespace which -command "::7z"] eq ""} {
+  source [file join [file dirname [info script]] 7z.tcl]
+}
+
+set tmpdir [file join [temporaryDirectory] 7z-smart-[format %x-%lx [pid] [clock microseconds]]]
+file mkdir $tmpdir
+set smartTest7zPath [file normalize $Z7_PATH]
+set smartTestRoot [file normalize [file join [file dirname [info script]] ..]]
+
+proc smart_test_7z {args} {
+  variable smartTest7zPath
+  if {[catch {exec $smartTest7zPath {*}$args} res opts]} {
+    return -code error "$res\n$opts"
+  }
+  return $res
+}
+
+proc smart_test_write {path data} {
+  file mkdir [file dirname $path]
+  set f [open $path wb]
+  try {
+    puts -nonewline $f $data
+  } finally {
+    close $f
+  }
+}
+
+proc smart_test_add {dir archive type files} {
+  set oldDir [pwd]
+  try {
+    cd $dir
+    smart_test_7z a -t$type $archive {*}$files
+  } finally {
+    cd $oldDir
+  }
+}
+
+proc smart_test_files {root} {
+  set result {}
+  foreach path [lsort [glob -directory $root -nocomplain *]] {
+    set rel [file tail $path]
+    if {[file isdirectory $path]} {
+      foreach child [smart_test_files $path] {
+        lappend result [file join $rel $child]
+      }
+    } else {
+      lappend result $rel
+    }
+  }
+  return $result
+}
+
+proc smart_test_run {archive outDir} {
+  smart_test_7z x -azsmart -y $archive "-o$outDir"
+}
+
+test smart-extract--no-temp-tar-cache {singleton tar is read as a stream} -body {
+  set path [file join $smartTestRoot CPP 7zip UI Common NestedTar.cpp]
+  set f [open $path rb]
+  try {
+    set source [read $f]
+  } finally {
+    close $f
+  }
+  if {[regexp {7ztar-|CTempFile|CreateRandomInTempFolder} $source]} {
+    error "nested tar must not use a temporary seekable cache"
+  }
+  set ret "OK"
+} -result "OK"
+
+test smart-extract--layout {smart extraction selects the expected root layout} -body {
+  set caseDir [file join $tmpdir layout]
+  set src [file join $caseDir src]
+  set out [file join $caseDir out]
+  file mkdir $src
+  file mkdir $out
+
+  smart_test_write [file join $src rootdir file.txt] "one"
+  smart_test_add $src [file join $caseDir single.zip] zip rootdir
+  smart_test_run [file join $caseDir single.zip] [file join $out single]
+  if {[smart_test_files [file join $out single]] ne [list [file join rootdir file.txt]]} {
+    error "single directory layout mismatch"
+  }
+  smart_test_run [file join $caseDir single.zip] [file join $out single]
+  if {[lsearch -exact [smart_test_files [file join $out single]] \
+      [file join rootdir_1 file.txt]] < 0} {
+    error "non-interactive conflict rename mismatch"
+  }
+
+  smart_test_write [file join $src a.txt] "a"
+  smart_test_write [file join $src b.txt] "b"
+  smart_test_add $src [file join $caseDir multi.zip] zip {a.txt b.txt}
+  smart_test_run [file join $caseDir multi.zip] [file join $out multi]
+  set multiFiles [smart_test_files [file join $out multi]]
+  if {$multiFiles ne [list [file join multi a.txt] [file join multi b.txt]]} {
+    error "multiple root layout mismatch: $multiFiles"
+  }
+
+  smart_test_write [file join $src same same file.txt] "same"
+  smart_test_add $src [file join $caseDir same.zip] zip [file join same same file.txt]
+  smart_test_run [file join $caseDir same.zip] [file join $out same]
+  if {[smart_test_files [file join $out same]] ne [list [file join same file.txt]]} {
+    error "duplicate root layout mismatch"
+  }
+
+  smart_test_write [file join $src tar-a.txt] "ta"
+  smart_test_write [file join $src tar-b.txt] "tb"
+  smart_test_add $src [file join $src inner.tar] tar {tar-a.txt tar-b.txt}
+  smart_test_add $src [file join $caseDir nested.zip] zip inner.tar
+  smart_test_run [file join $caseDir nested.zip] [file join $out nested]
+  set nestedFiles [smart_test_files [file join $out nested]]
+  if {$nestedFiles ne [list [file join inner tar-a.txt] [file join inner tar-b.txt]]} {
+    error "nested tar layout mismatch: $nestedFiles"
+  }
+
+  file mkdir [file join $src folder]
+  file copy -force [file join $src inner.tar] [file join $src folder inner.tar]
+  smart_test_add $src [file join $caseDir nested-subdir.zip] zip [file join folder inner.tar]
+  smart_test_run [file join $caseDir nested-subdir.zip] [file join $out nested-subdir]
+  if {[smart_test_files [file join $out nested-subdir]] \
+      ne [list [file join folder inner.tar]]} {
+    error "non-root tar was expanded unexpectedly"
+  }
+
+  smart_test_write [file join $src only.txt] "only"
+  smart_test_add $src [file join $caseDir single-file.zip] zip only.txt
+  smart_test_run [file join $caseDir single-file.zip] [file join $out single-file]
+  if {[smart_test_files [file join $out single-file]] ne [list only.txt]} {
+    error "single root file layout mismatch"
+  }
+
+  smart_test_write [file join $src note.txt] "note"
+  smart_test_add $src [file join $caseDir nested-sibling.zip] zip {inner.tar note.txt}
+  smart_test_run [file join $caseDir nested-sibling.zip] [file join $out nested-sibling]
+  if {[smart_test_files [file join $out nested-sibling]] \
+      ne [list [file join nested-sibling inner.tar] [file join nested-sibling note.txt]]} {
+    error "nested tar with sibling was expanded unexpectedly"
+  }
+
+  set ret "OK"
+} -result "OK"
+
+proc cleanupTests {} {
+  variable tmpdir
+  if {[info exists tmpdir] && [file exists $tmpdir]} {
+    file delete -force $tmpdir
+  }
+  ::tcltest::cleanupTests
+}
+
+cleanupTests
