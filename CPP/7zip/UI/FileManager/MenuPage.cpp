@@ -9,6 +9,7 @@
 #include "../../../Windows/FileFind.h"
 
 #include "../Explorer/ContextMenuFlags.h"
+#include "../Explorer/CompressFormats.h"
 #include "../Explorer/RegistryContextMenu.h"
 #include "../Explorer/resource.h"
 
@@ -49,31 +50,38 @@ struct CContextMenuItem
   UInt32 Flag;
 };
 
-static const CContextMenuItem kMenuItems[] =
+static void AddMenuItem(CObjectVector<CContextMenuItem> &items,
+    unsigned controlID, UInt32 flag)
 {
-  { IDS_CONTEXT_OPEN, kOpen },
-  { IDS_CONTEXT_OPEN, kOpenAs },
-  { IDS_CONTEXT_SMART_EXTRACT, kSmartExtract },
-  { IDS_CONTEXT_SMART_EXTRACT_DESKTOP, kSmartExtractToDesktop },
-  { IDS_CONTEXT_EXTRACT, kExtract },
-  { IDS_CONTEXT_EXTRACT_HERE, kExtractHere },
-  { IDS_CONTEXT_EXTRACT_TO, kExtractTo },
+  CContextMenuItem item;
+  item.ControlID = controlID;
+  item.Flag = flag;
+  items.Add(item);
+}
 
-  { IDS_CONTEXT_TEST, kTest },
-
-  { IDS_CONTEXT_COMPRESS, kCompress },
-  { IDS_CONTEXT_COMPRESS_TO, kCompressTo7z },
-  { IDS_CONTEXT_COMPRESS_TO, kCompressToZip },
-
+static void CreateMenuItems(CObjectVector<CContextMenuItem> &items)
+{
+  AddMenuItem(items, IDS_CONTEXT_OPEN, kOpen);
+  AddMenuItem(items, IDS_CONTEXT_OPEN, kOpenAs);
+  AddMenuItem(items, IDS_CONTEXT_SMART_EXTRACT, kSmartExtract);
+  AddMenuItem(items, IDS_CONTEXT_SMART_EXTRACT_DESKTOP, kSmartExtractToDesktop);
+  AddMenuItem(items, IDS_CONTEXT_EXTRACT, kExtract);
+  AddMenuItem(items, IDS_CONTEXT_EXTRACT_HERE, kExtractHere);
+  AddMenuItem(items, IDS_CONTEXT_EXTRACT_TO, kExtractTo);
+  AddMenuItem(items, IDS_CONTEXT_TEST, kTest);
+  AddMenuItem(items, IDS_CONTEXT_COMPRESS, kCompress);
+  AddMenuItem(items, IDS_CONTEXT_COMPRESS_TO, kCompressTo7z);
+  AddMenuItem(items, IDS_CONTEXT_COMPRESS_TO, kCompressToZip);
+  for (unsigned i = 0; i < Z7_ARRAY_SIZE(NCompressFormats::kFormats); i++)
+    AddMenuItem(items, IDS_CONTEXT_COMPRESS_TO, NCompressFormats::kFormats[i].Flag);
   #ifndef UNDER_CE
-  { IDS_CONTEXT_COMPRESS_EMAIL, kCompressEmail },
-  { IDS_CONTEXT_COMPRESS_TO_EMAIL, kCompressTo7zEmail },
-  { IDS_CONTEXT_COMPRESS_TO_EMAIL, kCompressToZipEmail },
+  AddMenuItem(items, IDS_CONTEXT_COMPRESS_EMAIL, kCompressEmail);
+  AddMenuItem(items, IDS_CONTEXT_COMPRESS_TO_EMAIL, kCompressTo7zEmail);
+  AddMenuItem(items, IDS_CONTEXT_COMPRESS_TO_EMAIL, kCompressToZipEmail);
   #endif
-
-  { IDS_PROP_CHECKSUM, kCRC },
-  { IDS_PROP_CHECKSUM, kCRC_Cascaded },
-};
+  AddMenuItem(items, IDS_PROP_CHECKSUM, kCRC);
+  AddMenuItem(items, IDS_PROP_CHECKSUM, kCRC_Cascaded);
+}
 
 
 #if !defined(_WIN64)
@@ -239,9 +247,11 @@ bool CMenuPage::OnInit()
 
   _listView.InsertColumn(0, L"", 200);
 
-  for (unsigned i = 0; i < Z7_ARRAY_SIZE(kMenuItems); i++)
+  CObjectVector<CContextMenuItem> menuItems;
+  CreateMenuItems(menuItems);
+  for (unsigned i = 0; i < menuItems.Size(); i++)
   {
-    const CContextMenuItem &menuItem = kMenuItems[i];
+    const CContextMenuItem &menuItem = menuItems[i];
 
     UString s = LangString(menuItem.ControlID);
     if (menuItem.Flag == kCRC)
@@ -264,16 +274,19 @@ bool CMenuPage::OnInit()
       case IDS_CONTEXT_COMPRESS_TO_EMAIL:
       {
         UString s2 = LangString(IDS_CONTEXT_ARCHIVE);
-        switch (menuItem.Flag)
+        if (menuItem.Flag == kCompressTo7z || menuItem.Flag == kCompressTo7zEmail)
+          s2 += ".7z";
+        else if (menuItem.Flag == kCompressToZip || menuItem.Flag == kCompressToZipEmail)
+          s2 += ".zip";
+        else
         {
-          case kCompressTo7z:
-          case kCompressTo7zEmail:
-            s2 += (".7z");
-            break;
-          case kCompressToZip:
-          case kCompressToZipEmail:
-            s2 += (".zip");
-            break;
+          const NCompressFormats::CFormat *format =
+              NCompressFormats::FindByFlag(menuItem.Flag);
+          if (format)
+          {
+            s2.Add_Dot();
+            s2 += format->Extension;
+          }
         }
         s = MyFormatNew(s, s2);
         break;
@@ -352,9 +365,11 @@ LONG CMenuPage::OnApply()
 
     ci.Flags = 0;
     
-    for (unsigned i = 0; i < Z7_ARRAY_SIZE(kMenuItems); i++)
+    CObjectVector<CContextMenuItem> menuItems;
+    CreateMenuItems(menuItems);
+    for (unsigned i = 0; i < menuItems.Size(); i++)
       if (_listView.GetCheckState(i))
-        ci.Flags |= kMenuItems[i].Flag;
+        ci.Flags |= menuItems[i].Flag;
     
     ci.Flags_Def = _flags_Changed;
     ci.Save();

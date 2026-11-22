@@ -87,6 +87,7 @@ public:
     kCompressTo7zEmail,
     kCompressToZip,
     kCompressToZipEmail,
+    kCompressToFormat,
     kHash_CRC32,
     kHash_CRC64,
     kHash_XXH32,
@@ -129,6 +130,7 @@ public:
     UString Folder;
     UString ArcName;
     UString ArcType;
+    UString ArcExtension;
     bool IsPopup;
     enum_CtxCommandType CtxCommandType;
 

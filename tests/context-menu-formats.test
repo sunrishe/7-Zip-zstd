@@ -1,0 +1,141 @@
+# context-menu-formats.test --
+#
+# Smoke tests for the archive formats exposed by the context menu.
+
+if {[namespace which -command "::7z"] eq ""} {
+  source [file join [file dirname [info script]] 7z.tcl]
+}
+
+if {[file exists $Z7_PATH]} {
+  set Z7_PATH [file normalize $Z7_PATH]
+}
+
+set context_menu_tmpdir [file join [temporaryDirectory] \
+    7z-context-formats-[format %x-%lx [pid] [clock microseconds]]]
+file mkdir $context_menu_tmpdir
+set context_menu_repo_root [file normalize [file join [file dirname [info script]] ..]]
+
+proc context_menu_write {path data} {
+  file mkdir [file dirname $path]
+  set f [open $path wb]
+  try {
+    puts -nonewline $f $data
+  } finally {
+    close $f
+  }
+}
+
+proc context_menu_archive_type {archive} {
+  set listing [7z l -slt -- $archive]
+  if {![regexp {\nType = ([^\r\n]+)} $listing {} type]} {
+    error "archive type not found in listing: $archive"
+  }
+  return $type
+}
+
+test context-menu-formats--order \
+    {compression and email entries follow the settings-page order} -body {
+  set path [file join $context_menu_repo_root CPP 7zip UI Explorer ContextMenu.cpp]
+  set f [open $path rb]
+  try {
+    set source [read $f]
+  } finally {
+    close $f
+  }
+  set markers [list \
+      "// Compress" \
+      "// CompressTo7z" \
+      "// CompressToZip" \
+      "const NCompressFormats::CFormat &format" \
+      "// CompressEmail" \
+      "// CompressTo7zEmail" \
+      "// CompressToZipEmail" \
+      "const bool needCrc"]
+  set previous -1
+  foreach marker $markers {
+    set position [string first $marker $source]
+    if {$position < 0 || $position <= $previous} {
+      error "context menu order marker out of sequence: $marker"
+    }
+    set previous $position
+  }
+  set _ OK
+} -result OK
+
+test context-menu-formats--single-stream \
+    {single-stream context menu formats round-trip} -body {
+  variable context_menu_tmpdir
+  set src [file join $context_menu_tmpdir src]
+  set payload "single-stream context menu payload"
+  set source [file join $src payload.txt]
+  context_menu_write $source $payload
+
+  foreach {type ext} {
+    brotli br
+    bzip2 bz2
+    gzip gz
+    lz4 lz4
+    lz5 lz5
+    lizard liz
+    xz xz
+    zstd zst
+  } {
+    set archive [file join $context_menu_tmpdir "single.$ext"]
+    set oldDir [pwd]
+    try {
+      cd $src
+      7z a -t$type $archive payload.txt
+    } finally {
+      cd $oldDir
+    }
+
+    if {[context_menu_archive_type $archive] ne $type} {
+      error "unexpected archive type for -t$type"
+    }
+    set result [7z_2_bin e -t$type -so -- $archive]
+    if {$result ne $payload} {
+      error "round-trip mismatch for -t$type"
+    }
+  }
+  set _ OK
+} -result OK
+
+test context-menu-formats--multiple-items \
+    {tar and wim context menu formats accept multiple files} -body {
+  variable context_menu_tmpdir
+  set src [file join $context_menu_tmpdir multi-src]
+  context_menu_write [file join $src a.txt] "a"
+  context_menu_write [file join $src b.txt] "b"
+
+  foreach {type ext} {tar tar wim wim} {
+    set archive [file join $context_menu_tmpdir "multi.$ext"]
+    set out [file join $context_menu_tmpdir "out-$type"]
+    set oldDir [pwd]
+    try {
+      cd $src
+      7z a -t$type $archive a.txt b.txt
+    } finally {
+      cd $oldDir
+    }
+
+    if {[context_menu_archive_type $archive] ne $type} {
+      error "unexpected archive type for -t$type"
+    }
+    7z x -y -t$type "-o$out" -- $archive
+    if {![file exists [file join $out a.txt]]
+        || ![file exists [file join $out b.txt]]} {
+      error "multiple-item round-trip failed for -t$type"
+    }
+  }
+  set _ OK
+} -result OK
+
+proc context_menu_cleanupTests {} {
+  variable context_menu_tmpdir
+  if {[info exists context_menu_tmpdir] && [file exists $context_menu_tmpdir]} {
+    file delete -force $context_menu_tmpdir
+  }
+  ::tcltest::cleanupTests
+}
+
+context_menu_cleanupTests

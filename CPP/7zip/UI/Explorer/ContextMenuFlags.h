@@ -21,9 +21,24 @@ namespace NContextMenuFlags
   const UInt32 kCompressToZip = 1 << 12;
   const UInt32 kCompressToZipEmail = 1 << 13;
   const UInt32 kSmartExtractToDesktop = 1 << 14;
+  const UInt32 kCompressToTar = 1 << 15;
+  const UInt32 kCompressToBz2 = 1 << 16;
+  const UInt32 kCompressToGz = 1 << 17;
+  const UInt32 kCompressToXz = 1 << 18;
+  const UInt32 kCompressToZst = 1 << 19;
+  const UInt32 kCompressToBr = 1 << 20;
+  const UInt32 kCompressToLz4 = 1 << 21;
+  const UInt32 kCompressToLz5 = 1 << 22;
+  const UInt32 kCompressToLizard = 1 << 23;
+  const UInt32 kCompressToWim = 1 << 24;
 
   const UInt32 kCRC_Cascaded = (UInt32)1 << 30;
   const UInt32 kCRC = (UInt32)1 << 31;
+
+  const UInt32 kDefaultContextMenuItems =
+      kExtract | kSmartExtract | kSmartExtractToDesktop | kTest |
+      kOpen | kOpenAs | kCompress | kCompressTo7z | kCompressToZip |
+      kCompressToZst | kCRC | kCRC_Cascaded;
 }
 
 #endif
