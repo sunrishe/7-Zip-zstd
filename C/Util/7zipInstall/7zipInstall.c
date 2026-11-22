@@ -5,13 +5,13 @@
 
 #define SZ_ERROR_ABORT 100
 
+#include <stdlib.h>
+
 #include "../../7zWindows.h"
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
 #pragma warning(disable : 4201) // nonstandard extension used : nameless struct/union
 #endif
-
-Z7_DIAGNOSTIC_IGNORE_CAST_FUNCTION
 
 #ifdef Z7_OLD_WIN_SDK
 struct IShellView;
@@ -37,6 +37,7 @@ typedef enum {
 #include "../../CpuArch.h"
 #include "../../DllSecur.h"
 
+#include "7zipInstallRestart.h"
 #include "resource.h"
 
 #if (defined(__GNUC__) && (__GNUC__ >= 8)) || defined(__clang__)
@@ -52,9 +53,6 @@ typedef enum {
 // wcsncpy() and lstrcpynW() work differently. We don't use them.
 
 #define kInputBufSize ((size_t)1 << 18)
-
-#define Z7_7ZIP_CUR_VER ((MY_VER_MAJOR << 16) | MY_VER_MINOR)
-#define Z7_7ZIP_DLL_VER_COMPAT ((16 << 16) | 3)
 
 static LPCSTR const k_7zip = "7-Zip-Zstandard";
 
@@ -139,6 +137,9 @@ static DWORD g_TotalSize;
 static WCHAR cmd[MAX_PATH + 4];
 static WCHAR cmdError[MAX_PATH + 4];
 static WCHAR path[MAX_PATH * 2 + 40];
+static WCHAR g_PreviousInstallPath[MAX_PATH * 2 + 40];
+static BoolInt g_HavePreviousInstallPath;
+static BoolInt g_MigrateInstall;
 
 
 
@@ -175,74 +176,6 @@ static void PrintErrorMessage(const char *s1, const WCHAR *s2)
     wcscat(m, s2);
   }
   MessageBoxW(g_HWND, m, k_7zip_with_Ver_str, MB_ICONERROR | MB_OK);
-}
-
-
-typedef DWORD (WINAPI * Func_GetFileVersionInfoSizeW)(LPCWSTR lptstrFilename, LPDWORD lpdwHandle);
-typedef BOOL (WINAPI * Func_GetFileVersionInfoW)(LPCWSTR lptstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData);
-typedef BOOL (WINAPI * Func_VerQueryValueW)(const LPVOID pBlock, LPWSTR lpSubBlock, LPVOID * lplpBuffer, PUINT puLen);
-
-static HMODULE g_version_dll_hModule;
-
-static DWORD GetFileVersion(LPCWSTR s)
-{
-  DWORD size = 0;
-  void *vi = NULL;
-  DWORD version = 0;
-
-  Func_GetFileVersionInfoSizeW my_GetFileVersionInfoSizeW;
-  Func_GetFileVersionInfoW my_GetFileVersionInfoW;
-  Func_VerQueryValueW my_VerQueryValueW;
-
-  if (!g_version_dll_hModule)
-  {
-    WCHAR buf[MAX_PATH + 100];
-    {
-      unsigned len = GetSystemDirectoryW(buf, MAX_PATH + 2);
-      if (len == 0 || len > MAX_PATH)
-        return 0;
-    }
-    {
-      unsigned pos = (unsigned)lstrlenW(buf);
-      if (buf[pos - 1] != '\\')
-        buf[pos++] = '\\';
-      lstrcpyW(buf + pos, L"version.dll");
-    }
-    g_version_dll_hModule = LoadLibraryW(buf);
-    if (!g_version_dll_hModule)
-      return 0;
-  }
-
-  my_GetFileVersionInfoSizeW = (Func_GetFileVersionInfoSizeW) Z7_CAST_FUNC_C GetProcAddress(g_version_dll_hModule,
-    "GetFileVersionInfoSizeW");
-  my_GetFileVersionInfoW = (Func_GetFileVersionInfoW) Z7_CAST_FUNC_C GetProcAddress(g_version_dll_hModule,
-    "GetFileVersionInfoW");
-  my_VerQueryValueW = (Func_VerQueryValueW) Z7_CAST_FUNC_C GetProcAddress(g_version_dll_hModule,
-    "VerQueryValueW");
-
-  if (!my_GetFileVersionInfoSizeW
-     || !my_GetFileVersionInfoW
-     || !my_VerQueryValueW)
-    return 0;
-  
-  size = my_GetFileVersionInfoSizeW(s, NULL);
-  if (size == 0)
-    return 0;
-  
-  vi = malloc(size);
-  if (!vi)
-    return 0;
-  
-  if (my_GetFileVersionInfoW(s, 0, size, vi))
-  {
-    VS_FIXEDFILEINFO *fi = NULL;
-    UINT fiLen = 0;
-    if (my_VerQueryValueW(vi, L"\\", (LPVOID *)&fi, &fiLen))
-      version = fi->dwFileVersionMS;
-  }
-  
-  free(vi);
-  return version;
 }
 
 
@@ -758,6 +691,65 @@ static void SetRegKey_Path(void)
   SetRegKey_Path2(HKEY_LOCAL_MACHINE);
 }
 
+static BoolInt IsInstalledPath(const WCHAR *dir);
+
+static BoolInt ReadInstalledPathFromKey(HKEY parentKey, WCHAR *dest)
+{
+  HKEY key = 0;
+  BoolInt ok = False;
+  const LONG res = RegOpenKeyExW(parentKey, k_Reg_Software_7zip, 0,
+      KEY_READ | k_Reg_WOW_Flag, &key);
+  if (res == ERROR_SUCCESS)
+  {
+    ok = MyRegistry_QueryString(key, k_Reg_Path32, dest);
+    RegCloseKey(key);
+  }
+  return ok;
+}
+
+static BoolInt ReadInstalledPath(WCHAR *dest)
+{
+  if (ReadInstalledPathFromKey(HKEY_CURRENT_USER, dest))
+  {
+    NormalizePrefix(dest);
+    if (IsInstalledPath(dest))
+      return True;
+  }
+  if (ReadInstalledPathFromKey(HKEY_LOCAL_MACHINE, dest))
+  {
+    NormalizePrefix(dest);
+    if (IsInstalledPath(dest))
+      return True;
+  }
+  return False;
+}
+
+static BoolInt PathsEqual(const WCHAR *path1, const WCHAR *path2)
+{
+  return lstrcmpiW(path1, path2) == 0;
+}
+
+static BoolInt IsPathPrefix(const WCHAR *prefix, const WCHAR *childPath)
+{
+  const size_t len = wcslen(prefix);
+  WCHAR pathPrefix[MAX_PATH * 2 + 40];
+  if (wcslen(childPath) < len)
+    return False;
+  wcscpy(pathPrefix, childPath);
+  pathPrefix[len] = 0;
+  if (!PathsEqual(prefix, pathPrefix))
+    return False;
+  return childPath[len] == 0 || IS_SEPAR(childPath[len]);
+}
+
+static BoolInt IsInstalledPath(const WCHAR *dir)
+{
+  WCHAR filePath[MAX_PATH * 2 + 40];
+  wcscpy(filePath, dir);
+  CatAscii(filePath, "7z.exe");
+  return GetFileAttributesW(filePath) != INVALID_FILE_ATTRIBUTES;
+}
+
 
 static HRESULT CreateShellLink(LPCWSTR srcPath, LPCWSTR targetPath)
 {
@@ -1118,20 +1110,13 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   #endif
 
 
+  g_HavePreviousInstallPath = ReadInstalledPath(g_PreviousInstallPath);
+
   if (path[0] == 0)
   {
-    HKEY key = 0;
-    BoolInt ok = False;
-    const LONG res = RegOpenKeyExW(HKEY_CURRENT_USER, k_Reg_Software_7zip, 0, KEY_READ | k_Reg_WOW_Flag, &key);
-    if (res == ERROR_SUCCESS)
-    {
-      ok = MyRegistry_QueryString(key, k_Reg_Path32, path);
-      // ok = MyRegistry_QueryString(key, k_Reg_Path, path);
-      RegCloseKey(key);
-    }
-    
-    // ok = False;
-    if (!ok)
+    if (g_HavePreviousInstallPath)
+      wcscpy(path, g_PreviousInstallPath);
+    else
     {
       /*
       #ifdef UNDER_CE
@@ -1248,6 +1233,92 @@ static BoolInt GetErrorMessage(DWORD errorCode, WCHAR *message)
   return True;
 }
 
+typedef struct
+{
+  WCHAR tempPath[MAX_PATH * 2 + 10];
+  WCHAR targetPath[MAX_PATH * 2 + 10];
+} CDeferredFile;
+
+static BoolInt AddDeferredFile(CDeferredFile **files, UINT *numFiles,
+    UINT *capacity, const WCHAR *tempPath, const WCHAR *targetPath)
+{
+  if (*numFiles == *capacity)
+  {
+    const UINT newCapacity = (*capacity == 0 ? 8 : *capacity * 2);
+    CDeferredFile *newFiles = (CDeferredFile *)realloc(*files,
+        newCapacity * sizeof(CDeferredFile));
+    if (!newFiles)
+      return False;
+    *files = newFiles;
+    *capacity = newCapacity;
+  }
+  wcscpy((*files)[*numFiles].tempPath, tempPath);
+  wcscpy((*files)[*numFiles].targetPath, targetPath);
+  (*numFiles)++;
+  return True;
+}
+
+static int RemovePreviousInstallFiles(const CSzArEx *db)
+{
+  UInt32 index = db->NumFiles;
+  WCHAR relativePath[MAX_PATH * 2 + 10];
+  WCHAR fullPath[MAX_PATH * 4 + 80];
+  int pendingReboot = 0;
+
+  while (index != 0)
+  {
+    const size_t len = SzArEx_GetFileNameUtf16(db, --index, NULL);
+    size_t i;
+    if (len >= Z7_ARRAY_SIZE(relativePath))
+      continue;
+
+    SzArEx_GetFileNameUtf16(db, index, (UInt16 *)relativePath);
+    wcscpy(fullPath, g_PreviousInstallPath);
+    wcscat(fullPath, relativePath);
+    for (i = wcslen(g_PreviousInstallPath); fullPath[i] != 0; i++)
+      if (fullPath[i] == '/')
+        fullPath[i] = CHAR_PATH_SEPARATOR;
+
+    SetFileAttributesW(fullPath, 0);
+    if (SzArEx_IsDir(db, index))
+      RemoveDirectoryW(fullPath);
+    else
+    {
+      if (!DeleteFileW(fullPath))
+      {
+        const DWORD error = GetLastError();
+        if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
+        {
+          SetFileAttributesW(fullPath, 0);
+          if (MoveFileExW(fullPath, NULL, MOVEFILE_DELAY_UNTIL_REBOOT))
+            pendingReboot = 1;
+          else
+            return -1;
+        }
+      }
+    }
+  }
+
+  SetFileAttributesW(g_PreviousInstallPath, 0);
+  if (!IsPathPrefix(g_PreviousInstallPath, path))
+    RemoveDirectoryW(g_PreviousInstallPath);
+  return pendingReboot;
+}
+
+static BoolInt ScheduleDeferredFilesForReboot(
+    const CDeferredFile *files, UINT numFiles)
+{
+  UINT i;
+  for (i = 0; i < numFiles; i++)
+  {
+    SetFileAttributesW(files[i].tempPath, 0);
+    if (!MoveFileExW(files[i].tempPath, files[i].targetPath,
+        MOVEFILE_DELAY_UNTIL_REBOOT | MOVEFILE_REPLACE_EXISTING))
+      return False;
+  }
+  return True;
+}
+
 
 
 static int Install(void)
@@ -1264,7 +1335,10 @@ static int Install(void)
   ISzAlloc allocTempImp;
   WCHAR sfxPath[MAX_PATH + 2];
 
-  int needRebootLevel = 0;
+  CDeferredFile *deferredFiles = NULL;
+  UINT numDeferredFiles = 0;
+  UINT deferredFilesCapacity = 0;
+  BoolInt pendingReboot = False;
 
   allocImp.Alloc = SzAlloc;
   allocImp.Free = SzFree;
@@ -1331,6 +1405,32 @@ if (res == SZ_OK)
   }
 
   NormalizePrefix(path);
+
+  g_MigrateInstall = False;
+  if (g_HavePreviousInstallPath
+      && IsInstalledPath(g_PreviousInstallPath)
+      && !PathsEqual(path, g_PreviousInstallPath))
+  {
+    if (!g_SilentMode)
+    {
+      WCHAR message[MAX_PATH * 4 + 300];
+      message[0] = 0;
+      CpyAscii(message, "7-Zip is already installed in:\n");
+      wcscat(message, g_PreviousInstallPath);
+      CpyAscii(message, "\n\nInstall the new version in:\n");
+      wcscat(message, path);
+      CpyAscii(message,
+          "\n\nAfter a successful installation, Setup will remove files installed by the previous version. Other files will be preserved.\n\nContinue?");
+      if (MessageBoxW(g_HWND, message, k_7zip_Setup,
+          MB_OKCANCEL | MB_ICONQUESTION | MB_DEFBUTTON1) != IDOK)
+      {
+        File_Close(&archiveStream.file);
+        return 2;
+      }
+    }
+    g_MigrateInstall = True;
+  }
+
   winRes = CreateComplexDir();
 
   if (winRes != 0)
@@ -1431,7 +1531,6 @@ if (res == SZ_OK)
         size_t j;
         // size_t nameStartPos = 0;
         UInt32 tempIndex = 0;
-        int fileLevel = 1 << 2;
         WCHAR origPath[MAX_PATH * 2 + 10];
 
         for (j = 0; temp[j] != 0; j++)
@@ -1497,8 +1596,6 @@ if (res == SZ_OK)
                 #endif
                 )
             {
-              const DWORD ver = GetFileVersion(path);
-              fileLevel = ((ver < Z7_7ZIP_DLL_VER_COMPAT || ver > Z7_7ZIP_CUR_VER) ? 2 : 1);
               tempIndex++;
               continue;
             }
@@ -1584,15 +1681,12 @@ if (res == SZ_OK)
 
         if (tempIndex != 0)
         {
-          // is it supported at win2000 ?
-          #ifndef UNDER_CE
-          if (!MoveFileExW(path, origPath, MOVEFILE_DELAY_UNTIL_REBOOT | MOVEFILE_REPLACE_EXISTING))
+          if (!AddDeferredFile(&deferredFiles, &numDeferredFiles,
+              &deferredFilesCapacity, path, origPath))
           {
-            winRes = GetLastError();
+            res = SZ_ERROR_MEM;
             break;
           }
-          needRebootLevel |= fileLevel;
-          #endif
         }
 
       }
@@ -1605,15 +1699,147 @@ if (res == SZ_OK)
 
     path[pathLen] = 0;
 
-    if (i == db.NumFiles)
+    if (i == db.NumFiles && res == SZ_OK)
     {
       SetRegKey_Path();
       WriteCLSID();
       WriteShellEx();
       
       SetShellProgramsGroup(g_HWND);
-      if (!g_SilentMode)
+      if (!g_SilentMode && numDeferredFiles == 0)
         SetWindowTextW(g_InfoLine_HWND, k_7zip_with_Ver L" is installed");
+    }
+
+    if (i == db.NumFiles && res == SZ_OK
+        && (numDeferredFiles != 0 || g_MigrateInstall))
+    {
+      const WCHAR **resources = NULL;
+      UINT numResources = 0;
+      UINT resourceCapacity = numDeferredFiles + 4;
+      UINT deferredIndex;
+      WCHAR prevDllPath1[MAX_PATH * 2 + 40];
+      WCHAR prevDllPath2[MAX_PATH * 2 + 40];
+      CInstallRestartOptions restartOptions;
+      DWORD restartManagerRes;
+
+      if (!g_SilentMode)
+        SetWindowTextW(g_InfoLine_HWND, L"Updating shell extension...");
+
+      resources = (const WCHAR **)malloc(
+          resourceCapacity * sizeof(resources[0]));
+      if (!resources)
+      {
+        if (numDeferredFiles != 0
+            && ScheduleDeferredFilesForReboot(deferredFiles, numDeferredFiles))
+          pendingReboot = True;
+        else
+        {
+          res = SZ_ERROR_MEM;
+          errorMessage = "Can't allocate memory for file replacement";
+        }
+      }
+
+      if (res == SZ_OK && resources)
+      {
+        for (deferredIndex = 0; deferredIndex < numDeferredFiles;
+            deferredIndex++)
+          resources[numResources++] =
+              deferredFiles[deferredIndex].targetPath;
+
+        if (g_MigrateInstall)
+        {
+          wcscpy(prevDllPath1, g_PreviousInstallPath);
+          CatAscii(prevDllPath1, "7-zip.dll");
+          wcscpy(prevDllPath2, g_PreviousInstallPath);
+          CatAscii(prevDllPath2, "7-zip32.dll");
+          if (GetFileAttributesW(prevDllPath1) != INVALID_FILE_ATTRIBUTES)
+            resources[numResources++] = prevDllPath1;
+          if (GetFileAttributesW(prevDllPath2) != INVALID_FILE_ATTRIBUTES)
+            resources[numResources++] = prevDllPath2;
+        }
+
+        {
+          restartOptions.Owner = g_HWND;
+          restartOptions.Caption = k_7zip_Setup;
+          restartOptions.SilentMode = g_SilentMode ? TRUE : FALSE;
+          restartManagerRes = InstallerRestart_ReleaseFiles(
+              resources, numResources, &restartOptions);
+          if (restartManagerRes == ERROR_SUCCESS)
+          {
+            for (deferredIndex = 0; deferredIndex < numDeferredFiles;
+                deferredIndex++)
+            {
+              unsigned attempt;
+              BoolInt moved = False;
+              for (attempt = 0; attempt < 20; attempt++)
+              {
+                if (MoveFileExW(deferredFiles[deferredIndex].tempPath,
+                    deferredFiles[deferredIndex].targetPath,
+                    MOVEFILE_REPLACE_EXISTING))
+                {
+                  moved = True;
+                  break;
+                }
+                Sleep(100);
+              }
+              if (!moved)
+              {
+                if (ScheduleDeferredFilesForReboot(
+                    deferredFiles + deferredIndex,
+                    numDeferredFiles - deferredIndex))
+                  pendingReboot = True;
+                else
+                {
+                  winRes = GetLastError();
+                  res = SZ_ERROR_FAIL;
+                  errorMessage =
+                      "Can't replace files or schedule replacement";
+                }
+                break;
+              }
+            }
+          }
+          else
+          {
+            if (numDeferredFiles != 0)
+            {
+              if (ScheduleDeferredFilesForReboot(deferredFiles,
+                  numDeferredFiles))
+                pendingReboot = True;
+              else
+              {
+                winRes = restartManagerRes;
+                res = SZ_ERROR_FAIL;
+                errorMessage =
+                    "Can't close applications or schedule file replacement";
+              }
+            }
+          }
+        }
+      }
+
+      InstallerRestart_End();
+      InstallerRestart_RestartExplorer();
+
+      if (res == SZ_OK && g_MigrateInstall && resources)
+      {
+        const int cleanupResult = RemovePreviousInstallFiles(&db);
+        if (cleanupResult < 0)
+        {
+          winRes = GetLastError();
+          res = SZ_ERROR_FAIL;
+          errorMessage =
+              "Can't remove files from the previous installation";
+        }
+        else if (cleanupResult > 0)
+          pendingReboot = True;
+        g_MigrateInstall = False;
+      }
+      free(resources);
+      if (!g_SilentMode && res == SZ_OK)
+        SetWindowTextW(g_InfoLine_HWND, pendingReboot
+            ? L"Restart Windows to complete installation"
+            : k_7zip_with_Ver L" is installed");
     }
   }
 
@@ -1625,46 +1851,19 @@ if (res == SZ_OK)
 
 }
 
+  free(deferredFiles);
+  InstallerRestart_End();
+
+  if (res == SZ_OK && pendingReboot && !g_SilentMode)
+    MessageBoxW(g_HWND,
+        L"Some files could not be replaced while applications were using them.\n\nRestart Windows to complete the installation. Setup has scheduled the replacement and no reinstall is required.",
+        k_7zip_Setup, MB_OK | MB_ICONINFORMATION);
+
   if (winRes != 0)
     res = SZ_ERROR_FAIL;
 
   if (res == SZ_OK)
-  {
-    if (!g_SilentMode && needRebootLevel > 1)
-    {
-      if (MessageBoxW(g_HWND, L"You must restart your system to complete the installation.\nRestart now?",
-          k_7zip_Setup, MB_YESNO | MB_DEFBUTTON2) == IDYES)
-      {
-        #ifndef UNDER_CE
-        
-        // Get a token for this process.
-        HANDLE hToken;
-
-        if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
-        {
-          TOKEN_PRIVILEGES tkp;
-          // Get the LUID for the shutdown privilege.
-          LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid);
-          tkp.PrivilegeCount = 1;  // one privilege to set
-          tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-          // Get the shutdown privilege for this process.
-          AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
-          
-          if (GetLastError() == ERROR_SUCCESS)
-          {
-            if (!ExitWindowsEx(EWX_REBOOT, 0))
-            {
-            }
-          }
-        }
-
-        #endif
-      }
-    }
-    
-    if (res == SZ_OK)
-      return 0;
-  }
+    return 0;
 
   if (!g_SilentMode)
   {

@@ -239,6 +239,12 @@ jobs:
       - name: Test
         shell: cmd
         run: |
+          if "${{ matrix.arch }}" == "arm64" (
+            call "%VCVARSALL_PATH%" arm64 -vcvars_ver=14.4
+          ) else (
+            call "%VCVARSALL_PATH%" ${{ matrix.arch }}
+          )
+          IF %errorlevel% NEQ 0 EXIT 1
           set PLATFORM=${{matrix.platform}}
           set OUTDIR=build\bin-%PLATFORM%
           if "${{matrix.darkmode}}" == "" set OUTDIR=%OUTDIR%-ndm
@@ -246,6 +252,8 @@ jobs:
           tclsh tests\7z-test.tcl -verbose tsem
           IF %errorlevel% NEQ 0 EXIT 1
           pwsh -NoProfile -File tests\test-smart-extract-lang.ps1
+          IF %errorlevel% NEQ 0 EXIT 1
+          pwsh -NoProfile -File tests\check-installer-imports.ps1 -InstallerPath "%OUTDIR%\Install.exe"
           IF %errorlevel% NEQ 0 EXIT 1
 
       - name: Upload a Build Artifact

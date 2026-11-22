@@ -242,6 +242,14 @@ SOURCE=.\7zipInstall.c
 # End Source File
 # Begin Source File
 
+SOURCE=.\7zipInstallRestart.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\7zipInstallRestart.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\resource.rc
 # End Source File
 # End Target

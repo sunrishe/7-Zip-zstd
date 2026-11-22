@@ -14,6 +14,7 @@ CFLAGS = $(CFLAGS) \
 
 MAIN_OBJS = \
   $O\7zipInstall.obj \
+  $O\7zipInstallRestart.obj \
 
 C_OBJS = \
   $O\7zAlloc.obj \
