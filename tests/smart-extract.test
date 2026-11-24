@@ -133,6 +133,13 @@ test smart-extract--layout {smart extraction selects the expected root layout} -
     error "single root file layout mismatch"
   }
 
+  file mkdir [file join $src empty-dir]
+  smart_test_add $src [file join $caseDir empty-dir.zip] zip empty-dir
+  smart_test_run [file join $caseDir empty-dir.zip] [file join $out empty-dir]
+  if {![file isdirectory [file join $out empty-dir empty-dir]]} {
+    error "single empty directory layout mismatch"
+  }
+
   smart_test_write [file join $src note.txt] "note"
   smart_test_add $src [file join $caseDir nested-sibling.zip] zip {inner.tar note.txt}
   smart_test_run [file join $caseDir nested-sibling.zip] [file join $out nested-sibling]

@@ -303,6 +303,7 @@ DWORD InstallerRestart_ReleaseFiles(
   UINT count = 0;
   RM_PROCESS_INFO *processes = NULL;
   BoolInt manualOnly = False;
+  BoolInt userManualMode = False;
   HWND owner = NULL;
   LPCWSTR caption = L"Setup";
   BOOL silentMode = False;
@@ -325,6 +326,7 @@ DWORD InstallerRestart_ReleaseFiles(
     UINT i;
     UINT liveCount;
     BoolInt onlyExplorer = True;
+    manualOnly = False;
 
     res = g_RestartManagerApi.StartSession(
         &g_RestartManager.SessionHandle, 0, sessionKey);
@@ -439,7 +441,7 @@ DWORD InstallerRestart_ReleaseFiles(
         return ERROR_SUCCESS;
       }
 
-      if (manualOnly)
+      if (manualOnly || userManualMode)
       {
         CpyAscii(message,
             "The following applications are using files that Setup must update:");
@@ -470,7 +472,7 @@ DWORD InstallerRestart_ReleaseFiles(
       {
         free(processes);
         InstallerRestart_End();
-        manualOnly = True;
+        userManualMode = True;
         Sleep(300);
         continue;
       }

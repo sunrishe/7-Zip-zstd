@@ -230,7 +230,7 @@ HRESULT PrepareSmartExtract(
     RINOK(nestedScanLink.Close())
     nestedScanLink.Release();
 
-    if (info.NumFiles == 0)
+    if (info.Roots.IsEmpty())
     {
       if (smartOptions.Callback)
         smartOptions.Callback->ThereAreNoFiles();
@@ -258,7 +258,7 @@ HRESULT PrepareSmartExtract(
       options.StdInMode = true;
   }
 
-  if (info.NumFiles == 0)
+  if (info.Roots.IsEmpty())
   {
     if (smartOptions.Callback)
       smartOptions.Callback->ThereAreNoFiles();

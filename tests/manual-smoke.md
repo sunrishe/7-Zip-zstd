@@ -49,6 +49,9 @@ reliably from the command-line test suite.
       deferred until reboot and the installed version still reports success.
 - [ ] Lock a file used by a non-restartable application. Verify the prompt
       lists the application name and PID, then verify Retry and Cancel paths.
+- [ ] Include one restartable and one non-restartable application in the lock
+      set. Close the non-restartable application, click Retry, and verify Setup
+      offers automatic close/restart for the remaining restartable application.
 - [ ] End the listed application while the prompt is open, click Retry, and
       verify the exited PID disappears and installation continues.
 - [ ] Install to a new directory while an older installation exists. Verify
